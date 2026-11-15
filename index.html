@@ -1,0 +1,2024 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>雲端同步：第 4 號機 | CareOS 平板終端</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+    :root {
+      --tablet-bg: #0b1120;
+    }
+
+    body {
+      font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #030712;
+      color: #f8fafc;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100dvh;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* 模擬平板外框 */
+    .tablet-frame {
+      width: 100%;
+      max-width: 430px;
+      height: 100dvh;
+      max-height: 900px;
+      background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 55%, #090d16 100%);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(148, 163, 184, 0.2);
+    }
+
+    @media (min-width: 450px) {
+      .tablet-frame {
+        height: 94dvh;
+        border-radius: 36px;
+        border: 8px solid #1e293b;
+        box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+      }
+    }
+
+    /* 自訂捲軸 */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .thin-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .thin-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .thin-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.5);
+      border-radius: 999px;
+    }
+
+    /* 密碼錯誤震動動畫 */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+    .animate-shake {
+      animation: shake 0.35s cubic-bezier(.36,.07,.19,.97) both;
+    }
+
+    /* 掃地機器人呼吸光點 */
+    @keyframes pulse-ring {
+      0% { transform: scale(0.8); opacity: 0.9; }
+      100% { transform: scale(2.4); opacity: 0; }
+    }
+    .robot-pulse {
+      transform-origin: center;
+      animation: pulse-ring 1.8s infinite ease-out;
+    }
+
+    /* 緊急警報閃爍 */
+    @keyframes red-flash {
+      0%, 100% { box-shadow: inset 0 0 0 0 rgba(239, 68, 68, 0); }
+      50% { box-shadow: inset 0 0 28px 4px rgba(239, 68, 68, 0.45); }
+    }
+    .alarm-border {
+      animation: red-flash 1.4s infinite ease-in-out;
+    }
+
+    /* 自訂滑桿樣式 */
+    input[type="range"] {
+      -webkit-appearance: none;
+      background: transparent;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #334155 0%, #38bdf8 100%);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 22px;
+      width: 22px;
+      border-radius: 50%;
+      background: #f8fafc;
+      border: 3px solid #0284c7;
+      margin-top: -7px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div x-data="careOSGame()" x-init="initGame()" class="tablet-frame" :class="stage === 4 && !ending ? 'alarm-border' : ''">
+
+  <!-- 1. 頂部常駐系統狀態列 -->
+  <header class="h-9 px-5 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 flex items-center justify-between text-xs z-30 shrink-0">
+    <div class="flex items-center gap-2">
+      <span class="font-mono-code font-bold text-sm tracking-wider"
+            :class="stage >= 4 ? 'text-rose-400 animate-pulse' : 'text-sky-400'"
+            x-text="currentTime"></span>
+      <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono-code">CareOS v4.2</span>
+    </div>
+
+    <div class="flex items-center gap-2.5 text-slate-300">
+      <!-- 通知紅點 -->
+      <div x-show="hasUnreadAlert" class="flex items-center gap-1 text-[10px] text-amber-400 font-medium">
+        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+        <span>系統異常</span>
+      </div>
+      <!-- Wi-Fi 圖示 -->
+      <div class="flex items-center gap-1 text-[10px] text-slate-400 font-mono-code">
+        <svg class="w-3.5 h-3.5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/>
+        </svg>
+        <span class="hidden xs:inline">QuietPines_5G</span>
+      </div>
+      <!-- 電量 -->
+      <div class="flex items-center gap-1 text-[10px] font-mono-code">
+        <span :class="stage >= 4 ? 'text-rose-400' : 'text-emerald-400'" x-text="stage >= 4 ? '14%' : '82%'"></span>
+        <div class="w-5 h-2.5 border border-slate-500 rounded-sm p-[1px] flex items-center">
+          <div class="h-full rounded-[1px] transition-all duration-500"
+               :class="stage >= 4 ? 'bg-rose-500 w-[20%]' : 'bg-emerald-400 w-[80%]'"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 2. 任務引導 / 系統通知橫幅（階段 1 巡檢期間隱藏，02:15 後才顯示） -->
+  <div x-show="showTopBanner" class="px-3 pt-2.5 pb-1 z-20 shrink-0">
+    <div @click="playTap(); bannerAction()"
+         class="rounded-xl p-2.5 border backdrop-blur-md transition-all cursor-pointer flex items-start gap-2.5 shadow-lg"
+         :class="bannerUrgent ? 'bg-rose-950/85 border-rose-500/60 text-rose-100' : 'bg-slate-900/85 border-sky-500/40 text-slate-200'">
+      <div class="mt-0.5 shrink-0">
+        <span x-show="!bannerUrgent" class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-500/20 text-sky-400 text-xs font-bold">i</span>
+        <span x-show="bannerUrgent" class="flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/30 text-rose-400 text-xs font-bold animate-bounce">!</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-mono-code uppercase tracking-wider font-bold"
+                :class="bannerUrgent ? 'text-rose-400' : 'text-sky-400'"
+                x-text="bannerTitle"></span>
+          <span class="text-[10px] text-slate-400">值班引導</span>
+        </div>
+        <p class="text-xs leading-relaxed mt-0.5 text-slate-100" x-text="bannerText"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 主工作區（桌面 APP 網格 或 作用中 APP 視窗） -->
+  <main class="flex-1 overflow-y-auto no-scrollbar px-4 py-3 relative">
+
+    <!-- A. 平板主畫面桌面 (Home Screen) -->
+    <div x-show="activeApp === null" x-transition.opacity.duration.200ms class="h-full flex flex-col justify-between pb-2">
+      <!-- 機構資訊與午夜例行巡檢任務卡片 -->
+      <div class="bg-slate-900/75 border border-slate-800 rounded-2xl p-3.5 mb-4 shadow-inner">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-[11px] text-sky-400 font-medium">靜謐山莊神經退化特護中心</p>
+            <h2 class="text-base font-bold text-white mt-0.5" x-text="staffGreeting"></h2>
+          </div>
+          <div class="text-right">
+            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-mono-code bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              負責區域：4F VIP 區
+            </span>
+            <p class="text-[10px] text-slate-400 mt-1 font-mono-code">重點關注：404 房</p>
+          </div>
+        </div>
+
+        <!-- 午夜例行系統巡檢進度與任務說明 -->
+        <div x-show="stage === 1" class="mt-3 pt-2.5 border-t border-slate-800/80 space-y-2">
+          <div class="flex justify-between items-center text-[11px]">
+            <span class="font-bold text-sky-300">午夜例行系統巡檢進度</span>
+            <span class="font-mono-code text-sky-400 font-bold" x-text="`${inspectedCount} / 3 完成`"></span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div class="h-full bg-sky-500 transition-all duration-500" :style="`width: ${(inspectedCount / 3) * 100}%`"></div>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            請先點擊開啟【醫院病歷系統】、【404 擬真中控】與【本院簡介網頁】進行例行巡檢。
+          </p>
+          <div class="flex flex-wrap gap-1.5 pt-0.5">
+            <span class="text-[10px] px-2 py-0.5 rounded-md border font-medium transition"
+                  :class="inspected.medchart ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/70 border-slate-800 text-slate-400'">
+              <span x-text="inspected.medchart ? '✓' : '○'"></span> 醫院病歷系統
+            </span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md border font-medium transition"
+                  :class="inspected.room404 ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/70 border-slate-800 text-slate-400'">
+              <span x-text="inspected.room404 ? '✓' : '○'"></span> 404 擬真中控
+            </span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md border font-medium transition"
+                  :class="inspected.website ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-slate-950/70 border-slate-800 text-slate-400'">
+              <span x-text="inspected.website ? '✓' : '○'"></span> 本院簡介網頁
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6 個 APP 圖示網格 -->
+      <div class="grid grid-cols-3 gap-y-6 gap-x-3 my-auto">
+        <!-- APP 1: 醫院病歷系統 -->
+        <button @click="openApp('medchart')" class="flex flex-col items-center group focus:outline-none">
+          <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-700 p-3.5 shadow-lg shadow-blue-950/60 border border-sky-400/30 relative transition-transform active:scale-90">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" class="w-full h-full">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15h6"/>
+            </svg>
+            <span x-show="!inspected.medchart || (stage === 3 && mriRevealed && !pt880412Checked)"
+                  class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-slate-950"></span>
+          </div>
+          <span class="text-[11px] font-medium text-slate-200 mt-2 text-center leading-tight">醫院病歷系統</span>
+        </button>
+
+        <!-- APP 2: 404 擬真中控 -->
+        <button @click="openApp('room404')" class="flex flex-col items-center group focus:outline-none">
+          <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-700 p-3.5 shadow-lg shadow-emerald-950/60 border border-teal-400/30 relative transition-transform active:scale-90">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" class="w-full h-full">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            <span x-show="!inspected.room404 || (stage === 1 && inspectedCount === 3 && !locks.doorLog) || (stage === 3 && !locks.mirror)"
+                  class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 border-2 border-slate-950 animate-ping"></span>
+            <span x-show="!inspected.room404 || (stage === 1 && inspectedCount === 3 && !locks.doorLog) || (stage === 3 && !locks.mirror)"
+                  class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 border-2 border-slate-950"></span>
+          </div>
+          <span class="text-[11px] font-medium text-slate-200 mt-2 text-center leading-tight">404 擬真中控</span>
+        </button>
+
+        <!-- APP 3: 本院簡介網頁 -->
+        <button @click="openApp('website')" class="flex flex-col items-center group focus:outline-none">
+          <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-700 p-3.5 shadow-lg shadow-indigo-950/60 border border-indigo-400/30 relative transition-transform active:scale-90">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" class="w-full h-full">
+              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            <span x-show="!inspected.website"
+                  class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-slate-950"></span>
+          </div>
+          <span class="text-[11px] font-medium text-slate-200 mt-2 text-center leading-tight">本院簡介網頁</span>
+        </button>
+
+        <!-- APP 4: 系統備忘錄 (階段2解鎖) -->
+        <button @click="openApp('notes')" class="flex flex-col items-center group focus:outline-none">
+          <div class="w-16 h-16 rounded-2xl p-3.5 shadow-lg border relative transition-all active:scale-90"
+               :class="stage >= 2 ? 'bg-gradient-to-br from-amber-500 to-orange-600 border-amber-300/40 shadow-orange-950/60' : 'bg-slate-800/80 border-slate-700 opacity-55'">
+            <svg x-show="stage >= 2" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" class="w-full h-full">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            <svg x-show="stage < 2" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" class="w-full h-full">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <span x-show="stage === 2 && !locks.memo"
+                  class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-300 border-2 border-slate-950"></span>
+          </div>
+          <span class="text-[11px] font-medium mt-2 text-center leading-tight"
+                :class="stage >= 2 ? 'text-slate-200' : 'text-slate-500'">系統備忘錄</span>
+        </button>
+
+        <!-- APP 5: 外送平台紀錄 (階段2解鎖) -->
+        <button @click="openApp('foodsync')" class="flex flex-col items-center group focus:outline-none">
+          <div class="w-16 h-16 rounded-2xl p-3.5 shadow-lg border relative transition-all active:scale-90"
+               :class="stage >= 2 ? 'bg-gradient-to-br from-pink-500 to-rose-600 border-pink-300/40 shadow-rose-950/60' : 'bg-slate-800/80 border-slate-700 opacity-55'">
+            <svg x-show="stage >= 2" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" class="w-full h-full">
+              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
+            </svg>
+            <svg x-show="stage < 2" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" class="w-full h-full">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <span x-show="stage === 2 && !foodOrderViewed"
+                  class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-300 border-2 border-slate-950"></span>
+          </div>
+          <span class="text-[11px] font-medium mt-2 text-center leading-tight"
+                :class="stage >= 2 ? 'text-slate-200' : 'text-slate-500'">外送平台紀錄</span>
+        </button>
+
+        <!-- APP 6: 護理站緊急中控 (階段4解鎖) -->
+        <button @click="openApp('guard')" class="flex flex-col items-center group focus:outline-none">
+          <div class="w-16 h-16 rounded-2xl p-3.5 shadow-lg border relative transition-all active:scale-90"
+               :class="stage >= 4 ? 'bg-gradient-to-br from-red-600 to-rose-900 border-red-400 shadow-red-950/80 animate-pulse' : 'bg-slate-800/80 border-slate-700 opacity-55'">
+            <svg x-show="stage >= 4" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" class="w-full h-full">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <svg x-show="stage < 4" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" class="w-full h-full">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <span x-show="stage >= 4"
+                  class="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-white text-rose-700 shadow">SOS</span>
+          </div>
+          <span class="text-[11px] font-medium mt-2 text-center leading-tight"
+                :class="stage >= 4 ? 'text-rose-400 font-bold' : 'text-slate-500'">護理站緊急中控</span>
+        </button>
+      </div>
+
+      <!-- 底部系統備註 -->
+      <div class="bg-slate-900/50 border border-slate-800/80 rounded-xl p-2.5 text-[11px] text-slate-400 flex items-center justify-between">
+        <span>終端編號：<strong class="text-slate-300 font-mono-code">NS-TAB-04</strong></span>
+        <span class="text-emerald-400/80">● 院內加密連線正常</span>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- APP 1: 醫院病歷系統 (MedChart)              -->
+    <!-- ========================================== -->
+    <div x-show="activeApp === 'medchart'" x-transition.opacity.duration.150ms class="space-y-3 pb-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <div>
+          <h3 class="text-base font-bold text-sky-400 flex items-center gap-1.5">
+            <span>🏥 醫院病歷系統</span>
+            <span class="text-[10px] font-mono-code bg-sky-950 text-sky-300 px-1.5 py-0.5 rounded border border-sky-800">MedChart</span>
+          </h3>
+        </div>
+        <button @click="closeApp()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">返回桌面</button>
+      </div>
+
+      <!-- 病歷號搜尋框 -->
+      <div class="bg-slate-900 border border-slate-700/80 rounded-xl p-2.5">
+        <label class="block text-[11px] text-slate-400 mb-1">全院電子病歷資料庫檢索（輸入病歷號）</label>
+        <div class="flex gap-2">
+          <input type="text" x-model="medSearchInput" @keyup.enter="searchMedRecord()"
+                 placeholder="例：PT-880412 或 404"
+                 class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono-code text-white uppercase focus:outline-none focus:border-sky-500" />
+          <button @click="searchMedRecord()"
+                  class="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg transition active:scale-95">
+            查詢
+          </button>
+        </div>
+        <!-- 快速切換病歷標籤（共 5 筆住院病歷 + 1 筆解鎖病歷） -->
+        <div class="flex gap-1.5 mt-2 overflow-x-auto no-scrollbar pb-0.5">
+          <template x-for="rec in patientRecords" :key="rec.id">
+            <button @click="selectedPatient = rec.id; medSearchInput = rec.chartNo"
+                    class="text-[10px] px-2.5 py-1 rounded-md border whitespace-nowrap transition"
+                    :class="selectedPatient === rec.id ? 'bg-sky-500/20 border-sky-500 text-sky-300 font-bold' : 'bg-slate-800 border-slate-700 text-slate-400'">
+              <span x-text="`${rec.room} - ${rec.shortName}`"></span>
+            </button>
+          </template>
+          <button x-show="pt880412Unlocked" @click="selectedPatient = 'PT-880412'; medSearchInput = 'PT-880412'"
+                  class="text-[10px] px-2.5 py-1 rounded-md border whitespace-nowrap bg-rose-500/20 border-rose-500 text-rose-300 font-bold">
+            ★ PT-880412 (已解鎖)
+          </button>
+        </div>
+      </div>
+
+      <!-- 病歷標準格式渲染（401 ~ 405 房） -->
+      <template x-for="rec in patientRecords" :key="rec.id">
+        <div x-show="selectedPatient === rec.id" class="space-y-3">
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-2">
+            <div class="flex justify-between items-start border-b border-slate-800 pb-2">
+              <div>
+                <span class="text-[10px] font-mono-code text-sky-400" x-text="`病歷號：${rec.chartNo}`"></span>
+                <h4 class="text-base font-bold text-white">
+                  <span x-text="rec.name"></span>
+                  <span class="text-xs font-normal text-slate-400" x-text="`（${rec.gender} / ${rec.age} 歲）`"></span>
+                </h4>
+              </div>
+              <span class="px-2 py-0.5 text-[10px] rounded font-bold border"
+                    :class="rec.id === '404' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-800 text-slate-300 border-slate-700'"
+                    x-text="rec.wardLabel"></span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+              <div class="bg-slate-950/70 p-2 rounded-lg">
+                <span class="text-[10px] text-slate-400 block">入院日期</span>
+                <span class="font-mono-code font-bold text-sky-300" x-text="rec.admitDate"></span>
+              </div>
+              <div class="bg-slate-950/70 p-2 rounded-lg">
+                <span class="text-[10px] text-slate-400 block">主治醫師</span>
+                <span class="font-bold text-slate-200" x-text="rec.doctor"></span>
+              </div>
+              <div class="col-span-2 bg-slate-950/70 p-2 rounded-lg">
+                <span class="text-[10px] text-slate-400 block">入院登記診斷</span>
+                <span class="font-bold" :class="rec.id === '404' ? 'text-rose-400' : 'text-slate-200'" x-text="rec.diagnosis"></span>
+              </div>
+              <div class="col-span-2 bg-slate-950/70 p-2 rounded-lg border border-sky-900/50">
+                <span class="text-[10px] text-sky-400 block">緊急聯絡人（家屬／代理人）</span>
+                <div class="flex justify-between items-center mt-0.5">
+                  <span class="font-bold text-white" x-text="rec.contactName"></span>
+                  <span class="font-mono-code text-amber-300 font-bold" x-text="rec.contactPhone"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 轉診單／入院評估摘要 -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-emerald-400" x-text="rec.doc1Title"></span>
+              <span class="text-[10px] font-mono-code text-slate-400" x-text="`評估日期：${rec.doc1Date}`"></span>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed bg-slate-950/70 p-2.5 rounded-lg border border-slate-800" x-html="rec.doc1Content"></p>
+          </div>
+
+          <!-- 後續診斷與專案／照護同意書 -->
+          <div class="bg-slate-900/90 border rounded-xl p-3.5 space-y-1.5"
+               :class="rec.id === '404' ? 'border-amber-500/30' : 'border-slate-800'">
+            <span class="text-xs font-bold block"
+                  :class="rec.id === '404' ? 'text-amber-400' : 'text-sky-300'"
+                  x-text="rec.doc2Title"></span>
+            <div class="text-xs text-slate-300 p-2.5 rounded-lg leading-relaxed border"
+                 :class="rec.id === '404' ? 'bg-amber-950/20 border-amber-500/20' : 'bg-slate-950/70 border-slate-800'"
+                 x-html="rec.doc2Content"></div>
+          </div>
+
+          <!-- 需求 5：林若晴初始病歷最後加入腦部掃描圖（與404擬真中控相同，但無病歷號碼） -->
+          <div x-show="rec.id === '404'" class="bg-slate-900/90 border border-sky-500/30 rounded-xl p-3.5 space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-sky-300">🧠 附屬影像紀錄：3T 高階腦部微結構 MRI 掃描圖</span>
+              <span class="text-[10px] font-mono-code text-slate-400">院內專案歸檔</span>
+            </div>
+            <div class="bg-black rounded-xl overflow-hidden border border-slate-700 p-2 flex justify-center">
+              <svg viewBox="0 0 280 210" class="w-full max-w-[260px] h-auto">
+                <g stroke="#1e293b" stroke-width="0.8">
+                  <line x1="140" y1="5" x2="140" y2="205"/>
+                  <line x1="5" y1="105" x2="275" y2="105"/>
+                  <circle cx="140" cy="105" r="88" fill="none" stroke-dasharray="3 3"/>
+                </g>
+                <ellipse cx="140" cy="105" rx="72" ry="86" fill="#0f172a" stroke="#94a3b8" stroke-width="4"/>
+                <path d="M140 28 C100 28, 78 60, 78 105 C78 150, 102 180, 140 180 C178 180, 202 150, 202 105 C202 60, 180 28, 140 28 Z"
+                      fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+                <path d="M140 32 L140 176 M95 65 Q118 75 110 95 M185 65 Q162 75 170 95 M90 125 Q115 118 112 145 M190 125 Q165 118 168 145"
+                      stroke="#475569" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                <path d="M124 82 Q134 105 122 128 Q114 105 124 82 Z" fill="#020617" stroke="#94a3b8" stroke-width="1.5"/>
+                <path d="M156 82 Q146 105 158 128 Q166 105 156 82 Z" fill="#020617" stroke="#94a3b8" stroke-width="1.5"/>
+                <text x="12" y="20" fill="#64748b" font-size="9" font-family="monospace">3T-T1W AXIAL</text>
+                <text x="12" y="32" fill="#64748b" font-size="9" font-family="monospace">SLICE: 14/28</text>
+              </svg>
+            </div>
+            <p class="text-[11px] text-slate-400">影像判讀摘要：雙側額顳葉皮質顯著萎縮，側腦室代償性擴大，符合早發性額顳葉失智症影像學特徵。</p>
+          </div>
+        </div>
+      </template>
+
+      <!-- 需求 4：張國棟（PT-880412）病歷與其他病患格式完全一致 -->
+      <div x-show="selectedPatient === 'PT-880412'" class="space-y-3">
+        <div class="bg-slate-900/90 border border-rose-500/60 rounded-xl p-3.5 space-y-2 shadow-lg shadow-rose-950/30">
+          <div class="flex justify-between items-start border-b border-slate-800 pb-2">
+            <div>
+              <span class="text-[10px] font-mono-code text-rose-400 font-bold">病歷號：PT-880412</span>
+              <h4 class="text-base font-bold text-white">
+                張國棟 <span class="text-xs font-normal text-rose-300">（男性 / 74 歲，已故）</span>
+              </h4>
+            </div>
+            <span class="px-2 py-0.5 text-[10px] rounded font-bold border bg-rose-500/20 text-rose-300 border-rose-500/40">
+              歷史封存病歷
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+            <div class="bg-slate-950/70 p-2 rounded-lg">
+              <span class="text-[10px] text-slate-400 block">入院日期</span>
+              <span class="font-mono-code font-bold text-rose-300">20260410</span>
+            </div>
+            <div class="bg-slate-950/70 p-2 rounded-lg">
+              <span class="text-[10px] text-slate-400 block">主治醫師</span>
+              <span class="font-bold text-slate-200">陳宥維 院長</span>
+            </div>
+            <div class="col-span-2 bg-slate-950/70 p-2 rounded-lg">
+              <span class="text-[10px] text-slate-400 block">入院登記診斷</span>
+              <span class="font-bold text-rose-400">重度雙側額顳葉皮質萎縮（bvFTD）</span>
+            </div>
+            <div class="col-span-2 bg-slate-950/70 p-2 rounded-lg border border-sky-900/50">
+              <span class="text-[10px] text-sky-400 block">緊急聯絡人（家屬／代理人）</span>
+              <div class="flex justify-between items-center mt-0.5">
+                <span class="font-bold text-white">張家榮（長子）</span>
+                <span class="font-mono-code text-amber-300 font-bold">0922-519-048</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-emerald-400">📄 醫學中心神經內科轉診及影像報告</span>
+            <span class="text-[10px] font-mono-code text-rose-300 font-bold">掃描日期：2026/04/12</span>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
+            主訴：重度認知功能喪失、語言退化及行為異常。<br/>
+            影像檢查：<strong class="text-white">3T 腦部 MRI（編號 PT-880412）顯示重度雙側額顳葉皮質萎縮與側腦室擴大</strong>（掃描時間為 2026/04/12，早於林若晴車禍前 4 個月）。
+          </p>
+        </div>
+
+        <div class="bg-slate-900/90 border border-rose-500/30 rounded-xl p-3.5 space-y-1.5">
+          <span class="text-xs font-bold text-rose-400 block">📑 《病故結案與研究影像調閱封存紀錄》</span>
+          <div class="text-xs text-slate-300 bg-rose-950/20 border border-rose-500/20 p-2.5 rounded-lg leading-relaxed">
+            病患已於 <strong>2026/06/20</strong> 因多重器官衰竭病逝並完成除戶結案。生前 3T 高階腦部 MRI 原始檔（PT-880412）於 2026/08/15 由陳宥維院長申請調閱並自院內公開資料庫封存。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- APP 2: 404 擬真中控 (App: 404)             -->
+    <!-- ========================================== -->
+    <div x-show="activeApp === 'room404'" x-transition.opacity.duration.150ms class="space-y-3 pb-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <div class="flex items-center gap-2">
+          <h3 class="text-base font-bold text-emerald-400">🏠 404 擬真中控</h3>
+          <span x-show="mirrorMode" class="text-[10px] px-2 py-0.5 rounded-full bg-purple-600 text-white font-mono-code font-bold">Device #4 鏡像模式</span>
+        </div>
+        <button @click="closeApp()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">返回桌面</button>
+      </div>
+
+      <!-- 模式切換鈕 -->
+      <div class="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-2">
+        <div class="flex gap-1.5">
+          <button @click="room404Tab = 'vacuum'"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                  :class="!mirrorMode && room404Tab === 'vacuum' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'">
+            掃地機器人路徑
+          </button>
+          <button @click="tryOpenDoorLog()"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                  :class="!mirrorMode && room404Tab === 'doorlog' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'">
+            <span x-show="!locks.doorLog">🔒</span>
+            <span>智慧門鎖日誌</span>
+          </button>
+        </div>
+
+        <button x-show="stage >= 3 || foodOrderViewed" @click="tryToggleMirror()"
+                class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition flex items-center gap-1"
+                :class="mirrorMode ? 'bg-purple-600 border-purple-400 text-white' : 'bg-rose-950/80 border-rose-500 text-rose-300 animate-pulse'">
+          <span x-show="!locks.mirror">🔐</span>
+          <span x-text="mirrorMode ? '退出鏡像' : 'Device #4'"></span>
+        </button>
+      </div>
+
+      <!-- 子分頁 1：掃地機器人路徑圖 -->
+      <div x-show="!mirrorMode && room404Tab === 'vacuum'" class="space-y-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-bold text-slate-200">Lidar 雷射建圖（模擬居家客廳模組）</span>
+            <span class="text-[11px] font-mono-code text-emerald-400 font-bold">清掃面積：11.8 坪</span>
+          </div>
+
+          <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 relative">
+            <svg viewBox="0 0 320 220" class="w-full h-auto">
+              <rect x="20" y="20" width="280" height="180" rx="6" fill="#0f172a" stroke="#38bdf8" stroke-width="2.5"/>
+              <rect x="35" y="35" width="90" height="55" rx="4" fill="#1e293b" stroke="#475569" stroke-dasharray="4 3"/>
+              <text x="80" y="66" fill="#94a3b8" font-size="10" text-anchor="middle">單人護理床</text>
+
+              <rect x="220" y="35" width="65" height="45" rx="4" fill="#1e293b" stroke="#475569" stroke-dasharray="4 3"/>
+              <text x="252" y="61" fill="#94a3b8" font-size="10" text-anchor="middle">獨立衛浴</text>
+
+              <rect x="205" y="140" width="95" height="60" fill="rgba(244, 63, 94, 0.18)" stroke="#f43f5e" stroke-width="1.8" stroke-dasharray="5 3"/>
+              <text x="252" y="166" fill="#fda4af" font-size="9" font-weight="bold" text-anchor="middle">禁區 (1.5 坪)</text>
+              <text x="252" y="180" fill="#fb7185" font-size="8.5" font-family="monospace" text-anchor="middle">[護理站氣動給藥窗 #209]</text>
+
+              <line x1="20" y1="135" x2="20" y2="175" stroke="#f59e0b" stroke-width="5"/>
+              <text x="28" y="158" fill="#fbbf24" font-size="9" font-weight="bold">◀ 單向氣密門</text>
+
+              <path d="M 40 110 L 195 110 L 195 125 L 40 125 L 40 140 L 190 140 L 190 155 L 55 155 L 55 170 L 190 170 L 190 185 L 45 185"
+                    fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+
+              <circle cx="195" cy="110" r="10" fill="#10b981" class="robot-pulse"/>
+              <circle cx="195" cy="110" r="6" fill="#34d399" stroke="#064e3b" stroke-width="2"/>
+            </svg>
+          </div>
+
+          <div class="mt-2.5 text-xs text-slate-300 bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1">
+            <p>• 結構偵測：<span class="text-amber-300">無廚房、無玄關、無陽台結構</span>，實際清掃總面積永遠精準停在 <strong>11.8 坪</strong>。</p>
+            <p>• 系統迴避節點：<span class="font-mono-code text-rose-400">[護理站氣動給藥窗 #209]</span>（佔地 1.5 坪）。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 子分頁 2：智慧門鎖日誌 -->
+      <div x-show="!mirrorMode && room404Tab === 'doorlog' && locks.doorLog" class="space-y-2.5">
+        <div class="flex items-center justify-between text-[11px] text-slate-400 px-1">
+          <span>404 房門禁感測器完整日誌（共 14 筆）</span>
+          <span class="text-amber-400">↓ 請向下滑動檢視完整紀錄</span>
+        </div>
+
+        <div @scroll="onDoorLogScroll($event)"
+             class="bg-slate-900 border border-slate-800 rounded-xl divide-y divide-slate-800 text-xs font-mono-code max-h-[340px] overflow-y-auto thin-scrollbar">
+          <template x-for="(entry, i) in doorLogEntries" :key="i">
+            <div class="p-3" :class="entry.highlight ? 'bg-rose-950/35' : ''">
+              <div class="flex justify-between" :class="entry.timeClass">
+                <span x-text="entry.time"></span>
+                <span x-text="entry.tag"></span>
+              </div>
+              <p class="mt-1 font-sans" :class="entry.msgClass" x-text="entry.msg"></p>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- 鏡像模式：Device #4 林若晴私人手機備份     -->
+      <!-- ========================================== -->
+      <div x-show="mirrorMode && locks.mirror" class="space-y-3">
+        <div class="bg-purple-950/50 border border-purple-500/40 rounded-xl p-2.5 flex items-center justify-between">
+          <span class="text-xs font-bold text-purple-200">📱 已掛載：林若晴私人手機鏡像 (Device #4)</span>
+          <div class="flex gap-1">
+            <button @click="mirrorTab = 'chat'"
+                    class="px-2.5 py-1 rounded text-[11px] font-bold transition"
+                    :class="mirrorTab === 'chat' ? 'bg-purple-600 text-white' : 'bg-slate-900 text-slate-400'">
+              通訊軟體
+            </button>
+            <button @click="mirrorTab = 'album'"
+                    class="px-2.5 py-1 rounded text-[11px] font-bold transition"
+                    :class="mirrorTab === 'album' ? 'bg-purple-600 text-white' : 'bg-slate-900 text-slate-400'">
+              雲端相簿
+            </button>
+          </div>
+        </div>
+
+        <!-- 需求 2：通訊軟體分頁（含陳宥維學長、父母、公司群） -->
+        <div x-show="mirrorTab === 'chat'" class="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2.5">
+          <!-- 對話對象切換列 -->
+          <div class="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 border-b border-slate-800">
+            <button @click="activeChatThread = 'chen'"
+                    class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition flex items-center gap-1"
+                    :class="activeChatThread === 'chen' ? 'bg-purple-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'">
+              <span>📌 陳宥維學長</span>
+            </button>
+            <button @click="activeChatThread = 'parents'"
+                    class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition flex items-center gap-1"
+                    :class="activeChatThread === 'parents' ? 'bg-purple-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'">
+              <span>👨‍👩‍👧 爸爸媽媽</span>
+            </button>
+            <button @click="activeChatThread = 'work'"
+                    class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition flex items-center gap-1"
+                    :class="activeChatThread === 'work' ? 'bg-purple-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'">
+              <span>💼 工作室核心群</span>
+            </button>
+          </div>
+
+          <!-- 對話串 1：置頂對話 陳宥維學長（移除日期後括號敘述、0817後一來一往自導自演、滑到底觸發對話） -->
+          <div x-show="activeChatThread === 'chen'"
+               @scroll="onChenChatScroll($event)"
+               class="space-y-2.5 text-xs max-h-[330px] overflow-y-auto thin-scrollbar pr-1">
+            <div class="text-center text-[10px] text-slate-500 font-mono-code">2026/08/14 21:40</div>
+            <div class="bg-slate-800 text-slate-200 p-2.5 rounded-2xl rounded-tl-none max-w-[85%]">
+              學長，我剛在路邊被擦撞到頭，急診說只有輕微腦震盪，但健保排 MRI 要等 45 天，我下週還要出國進修……
+            </div>
+            <div class="bg-sky-900/70 text-sky-100 p-2.5 rounded-2xl rounded-tr-none max-w-[85%] ml-auto border border-sky-700/50">
+              別擔心，我們中心剛好有「3T 腦部微結構免費研究專案」，今晚直接過來我幫妳安排綠色通道，做完就能安心出國。
+            </div>
+
+            <div class="text-center text-[10px] text-slate-500 font-mono-code pt-2">2026/08/17 19:20</div>
+            <div class="bg-sky-900/70 text-sky-100 p-2.5 rounded-2xl rounded-tr-none max-w-[85%] ml-auto border border-sky-700/50">
+              寶貝，今天氣色看起來好多了，乖乖在山莊聽我的話休養，不要想太多喔。
+            </div>
+            <div class="bg-slate-800 text-slate-200 p-2.5 rounded-2xl rounded-tl-none max-w-[85%]">
+              嗯嗯老公，我在山莊休養得很好，有你在我身邊照顧我最安心了❤️
+              <span class="block text-[10px] text-rose-400 font-mono-code mt-1 bg-slate-950/80 px-1.5 py-0.5 rounded">
+                [由 Admin_Web_Portal 院長辦公室電腦代發]
+              </span>
+            </div>
+            <div class="bg-sky-900/70 text-sky-100 p-2.5 rounded-2xl rounded-tr-none max-w-[85%] ml-auto border border-sky-700/50">
+              對了，妳工作室那邊的股權轉讓書我都準備好了，妳現在不方便出面，就照我們說好的全部交給我處理吧？
+            </div>
+            <div class="bg-slate-800 text-slate-200 p-2.5 rounded-2xl rounded-tl-none max-w-[85%]">
+              好呀老公，我名下的股份跟專利都全權轉讓給你代管，等我病好了我們就去登記結婚！
+              <span class="block text-[10px] text-rose-400 font-mono-code mt-1 bg-slate-950/80 px-1.5 py-0.5 rounded">
+                [由 Admin_Web_Portal 院長辦公室電腦代發]
+              </span>
+            </div>
+            <div class="text-center text-[10px] text-amber-400/80 pt-1">— 已顯示最新訊息 —</div>
+          </div>
+
+          <!-- 對話串 2：爸爸媽媽 -->
+          <div x-show="activeChatThread === 'parents'" class="space-y-2.5 text-xs max-h-[330px] overflow-y-auto thin-scrollbar pr-1">
+            <div class="text-center text-[10px] text-slate-500 font-mono-code">2026/08/18 10:15</div>
+            <div class="bg-slate-800 text-slate-200 p-2.5 rounded-2xl rounded-tl-none max-w-[85%]">
+              <span class="text-[10px] text-amber-300 block font-bold mb-0.5">媽媽</span>
+              若晴，妳不是說這週要飛荷蘭進修嗎？怎麼打電話都轉語音信箱？
+            </div>
+            <div class="bg-purple-950/70 text-purple-100 p-2.5 rounded-2xl rounded-tr-none max-w-[85%] ml-auto border border-purple-700/50">
+              媽抱歉！我臨時決定跟學長在南部山區閉關做一個秘密專案，這邊收訊很差只能偶爾連網路，我有空會傳訊息給你們，別擔心也別跑來找我喔！
+              <span class="block text-[10px] text-rose-400 font-mono-code mt-1 bg-slate-950/80 px-1.5 py-0.5 rounded">
+                [由 Admin_Web_Portal 院長辦公室電腦代發]
+              </span>
+            </div>
+            <div class="bg-slate-800 text-slate-200 p-2.5 rounded-2xl rounded-tl-none max-w-[85%]">
+              <span class="text-[10px] text-sky-300 block font-bold mb-0.5">爸爸</span>
+              自己一個人在外面要小心身體，有空記得跟家裡報平安。
+            </div>
+          </div>
+
+          <!-- 對話串 3：工作室核心群 -->
+          <div x-show="activeChatThread === 'work'" class="space-y-2.5 text-xs max-h-[330px] overflow-y-auto thin-scrollbar pr-1">
+            <div class="text-center text-[10px] text-slate-500 font-mono-code">2026/08/21 15:40</div>
+            <div class="bg-slate-800 text-slate-200 p-2.5 rounded-2xl rounded-tl-none max-w-[85%]">
+              <span class="text-[10px] text-emerald-300 block font-bold mb-0.5">營運長 Jason</span>
+              @林若晴 創辦人，Q3 的研發授權合約急著用印，法務說需要妳本人親自簽署才能動撥資金。
+            </div>
+            <div class="bg-purple-950/70 text-purple-100 p-2.5 rounded-2xl rounded-tr-none max-w-[85%] ml-auto border border-purple-700/50">
+              各位夥伴，我近期因個人健康因素需長期靜養，即日起本人名下所有股權與執行長簽核權限，已全權委託陳宥維醫師代理行使，請大家全力配合陳醫師指示。
+              <span class="block text-[10px] text-rose-400 font-mono-code mt-1 bg-slate-950/80 px-1.5 py-0.5 rounded">
+                [由 Admin_Web_Portal 院長辦公室電腦代發]
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 鏡像分頁 2：雲端相簿（含 MRI 滑桿機關） -->
+        <div x-show="mirrorTab === 'album'" class="space-y-3">
+          <div class="grid grid-cols-2 gap-2">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-2">
+              <svg viewBox="0 0 160 100" class="w-full rounded bg-slate-950">
+                <rect width="160" height="100" fill="#050811"/>
+                <ellipse cx="80" cy="65" rx="45" ry="18" fill="#1e293b"/>
+                <circle cx="55" cy="55" r="10" fill="#334155"/>
+                <text x="8" y="15" fill="#f43f5e" font-size="8" font-family="monospace">REC ● 02:31 AM</text>
+              </svg>
+              <p class="text-[10px] text-slate-400 mt-1">病房暗角熟睡剪影<br/><span class="font-mono-code text-purple-400">來源：Device #4</span></p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-2">
+              <svg viewBox="0 0 160 100" class="w-full rounded bg-slate-950">
+                <rect width="160" height="100" fill="#050811"/>
+                <rect x="45" y="20" width="70" height="60" rx="4" fill="#0f172a" stroke="#334155"/>
+                <path d="M55 50 Q80 25 105 50 T105 70" fill="none" stroke="#475569" stroke-width="2"/>
+                <text x="8" y="15" fill="#f43f5e" font-size="8" font-family="monospace">REC ● 02:34 AM</text>
+              </svg>
+              <p class="text-[10px] text-slate-400 mt-1">夜間靜脈注射前拍攝<br/><span class="font-mono-code text-purple-400">來源：Device #4</span></p>
+            </div>
+          </div>
+
+          <!-- 關鍵互動機關：MRI 腦部掃描圖 + 曝光調整滑桿（需求 3：移除所有系統文字提示，改由角色對話觸發） -->
+          <div class="bg-slate-900 border border-sky-500/40 rounded-xl p-3 space-y-2.5">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-sky-300">🧠 歸檔影像：林若晴_3T_MRI_Raw.dcm</span>
+              <span class="text-[10px] font-mono-code text-slate-400" x-text="`曝光度：${mriExposure}%`"></span>
+            </div>
+
+            <!-- SVG 腦部 MRI 掃描圖 -->
+            <div class="relative bg-black rounded-xl overflow-hidden border border-slate-700 p-2 flex justify-center">
+              <svg viewBox="0 0 280 210" class="w-full max-w-[260px] h-auto">
+                <g stroke="#1e293b" stroke-width="0.8">
+                  <line x1="140" y1="5" x2="140" y2="205"/>
+                  <line x1="5" y1="105" x2="275" y2="105"/>
+                  <circle cx="140" cy="105" r="88" fill="none" stroke-dasharray="3 3"/>
+                </g>
+
+                <ellipse cx="140" cy="105" rx="72" ry="86" fill="#0f172a" stroke="#94a3b8" stroke-width="4"/>
+                <path d="M140 28 C100 28, 78 60, 78 105 C78 150, 102 180, 140 180 C178 180, 202 150, 202 105 C202 60, 180 28, 140 28 Z"
+                      fill="#1e293b" stroke="#64748b" stroke-width="2"/>
+                <path d="M140 32 L140 176 M95 65 Q118 75 110 95 M185 65 Q162 75 170 95 M90 125 Q115 118 112 145 M190 125 Q165 118 168 145"
+                      stroke="#475569" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                <path d="M124 82 Q134 105 122 128 Q114 105 124 82 Z" fill="#020617" stroke="#94a3b8" stroke-width="1.5"/>
+                <path d="M156 82 Q146 105 158 128 Q166 105 156 82 Z" fill="#020617" stroke="#94a3b8" stroke-width="1.5"/>
+
+                <text x="12" y="20" fill="#64748b" font-size="9" font-family="monospace">3T-T1W AXIAL</text>
+                <text x="12" y="32" fill="#64748b" font-size="9" font-family="monospace">SLICE: 14/28</text>
+
+                <!-- 右下角隱藏的真實病歷號（滑桿拉高後顯現） -->
+                <g>
+                  <rect x="168" y="166" width="98" height="30" rx="15"
+                        fill="rgba(225, 29, 72, 0.15)" stroke="#f43f5e" stroke-width="2.2"
+                        :opacity="mriExposure > 75 ? 1 : 0" />
+                  <text x="217" y="185" fill="#fda4af" font-size="12" font-weight="bold" font-family="monospace" text-anchor="middle">
+                    PT-880412
+                  </text>
+                  <rect x="162" y="160" width="110" height="40" rx="4" fill="#000000"
+                        :style="`opacity: ${Math.max(0, 1 - (mriExposure / 85))}`" />
+                </g>
+              </svg>
+            </div>
+
+            <!-- 曝光調整滑桿 -->
+            <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+              <div class="flex justify-between text-[11px] mb-1.5">
+                <span class="text-slate-300 font-medium">🎚️ 影像曝光／對比度調整滑桿</span>
+                <span class="text-slate-400" x-text="`${mriExposure}%`"></span>
+              </div>
+              <input type="range" min="0" max="100" x-model="mriExposure" @change="onMriSliderRelease()" @input="onMriSliderChange()" class="w-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- APP 3: 本院簡介網頁 (QuietPines Web)       -->
+    <!-- ========================================== -->
+    <div x-show="activeApp === 'website'" x-transition.opacity.duration.150ms class="space-y-3 pb-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="text-base font-bold text-indigo-400">🌐 本院簡介網頁</h3>
+        <button @click="closeApp()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">返回桌面</button>
+      </div>
+
+      <div class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-[11px] font-mono-code text-slate-400 flex items-center gap-2">
+        <span class="text-emerald-400">🔒</span>
+        <span>https://www.quietpines-care.tw/vip-4f</span>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-3">
+        <div>
+          <span class="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold">尊榮隱私照護</span>
+          <h4 class="text-base font-bold text-white mt-1">靜謐山莊 VIP 單人特護房型介紹</h4>
+          <p class="text-xs text-slate-400 mt-1">地址：<strong class="text-slate-200">新北市新店區山林路 88 號 4 樓（B棟）</strong></p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <span class="text-[10px] text-slate-400 block">標準室內面積</span>
+            <span class="text-sm font-bold text-emerald-400">11.8 坪（含獨立衛浴）</span>
+          </div>
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <span class="text-[10px] text-slate-400 block">給藥與補給系統</span>
+            <span class="text-sm font-bold text-sky-400">獨立氣動給藥窗</span>
+          </div>
+        </div>
+
+        <div class="bg-slate-950 rounded-xl p-3 border border-slate-800">
+          <p class="text-[11px] font-bold text-slate-300 mb-2">📐 VIP 單人特護房標準建築平面圖</p>
+          <svg viewBox="0 0 320 220" class="w-full h-auto">
+            <rect x="20" y="20" width="280" height="180" rx="6" fill="#0f172a" stroke="#818cf8" stroke-width="2.5"/>
+            <rect x="35" y="35" width="90" height="55" rx="4" fill="#1e293b" stroke="#6366f1"/>
+            <text x="80" y="66" fill="#c7d2fe" font-size="10" text-anchor="middle">醫療電動床</text>
+
+            <rect x="220" y="35" width="65" height="45" rx="4" fill="#1e293b" stroke="#6366f1"/>
+            <text x="252" y="61" fill="#c7d2fe" font-size="10" text-anchor="middle">無障礙衛浴</text>
+
+            <rect x="205" y="140" width="95" height="60" fill="rgba(99, 102, 241, 0.2)" stroke="#818cf8" stroke-width="1.5"/>
+            <text x="252" y="168" fill="#a5b4fc" font-size="9" font-weight="bold" text-anchor="middle">氣動給藥管道間</text>
+            <text x="252" y="182" fill="#818cf8" font-size="8.5" text-anchor="middle">(1.5 坪設備區)</text>
+
+            <line x1="20" y1="135" x2="20" y2="175" stroke="#818cf8" stroke-width="5"/>
+            <text x="28" y="158" fill="#a5b4fc" font-size="9">走廊氣密門</text>
+            <text x="160" y="118" fill="#64748b" font-size="11" text-anchor="middle">主照護空間（總計 11.8 坪）</text>
+          </svg>
+          <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">
+            ※ 房型採用全封閉式隔音設計，無對外陽台與明火廚房，確保高階靜養病患之絕對安全與隱私。
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- APP 4: 系統備忘錄 (Notes)                  -->
+    <!-- ========================================== -->
+    <div x-show="activeApp === 'notes'" x-transition.opacity.duration.150ms class="space-y-3 pb-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="text-base font-bold text-amber-400">📝 系統備忘錄</h3>
+        <button @click="closeApp()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">返回桌面</button>
+      </div>
+
+      <!-- 一般交班備忘 -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-1">
+        <div class="flex justify-between text-[11px] text-slate-400">
+          <span>護理站交班注意事項</span>
+          <span class="font-mono-code">2026/11/14</span>
+        </div>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          404 房之給藥統一透過「氣動給藥窗 #209」傳送，夜間鎮靜點滴由陳院長親自負責，大夜班人員無需進入室內。
+        </p>
+      </div>
+
+      <!-- 加密草稿 -->
+      <div @click="tryOpenMemo()"
+           class="rounded-xl p-4 border transition cursor-pointer"
+           :class="locks.memo ? 'bg-rose-950/30 border-rose-500/50' : 'bg-slate-900 border-amber-500/50 hover:bg-slate-800/80'">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold flex items-center gap-1.5"
+                :class="locks.memo ? 'text-rose-400' : 'text-amber-300'">
+            <span x-text="locks.memo ? '🔓' : '🔐'"></span>
+            <span>[雲端同步草稿] 未發送訊息</span>
+          </span>
+          <span class="text-[10px] font-mono-code px-2 py-0.5 rounded bg-slate-950 text-slate-400"
+                x-text="locks.memo ? '已解密' : '點擊輸入密碼'"></span>
+        </div>
+
+        <div x-show="!locks.memo" class="mt-2 text-xs text-slate-400">
+          此備忘錄已由使用者設定 8 位數日期密碼鎖定。
+        </div>
+
+        <div x-show="locks.memo" class="mt-3 bg-slate-950/90 border border-rose-500/30 rounded-lg p-3 text-xs text-rose-100 leading-relaxed space-y-3">
+          <div class="border-b border-rose-900/50 pb-2.5 space-y-1">
+            <span class="text-[10px] font-mono-code text-rose-400 block">草稿 #01｜2026/08/15 04:12</span>
+            <p class="font-bold text-rose-200">「宥維學長，為什麼我做完 MRI 檢查醒來就在這裡？門從裡面根本打不開，我的私人手機和皮包也被拿走了……這到底是什麼地方？誰來救救我……」</p>
+          </div>
+
+          <div class="border-b border-rose-900/50 pb-2.5 space-y-1">
+            <span class="text-[10px] font-mono-code text-amber-400 block">草稿 #02｜2026/08/18 13:40</span>
+            <p class="text-slate-200">「今天早上牆上的金屬小窗口自動打開送進來餐盒，但沒有任何護理師進來。平板裡顯示的客廳地圖是假的，這間房根本沒有廚房也沒有大門！剛才我透過平板的雲端同步看到我的帳號居然還在幫『我自己』傳訊息給爸媽和公司律師……是學長拿著我的手機在冒充我！」</p>
+          </div>
+
+          <div class="space-y-1">
+            <span class="text-[10px] font-mono-code text-sky-400 block">草稿 #03｜2026/11/14 22:05</span>
+            <p class="text-slate-200">「每次學長半夜刷卡進來打完針，我都會昏睡到隔天中午。我把這台平板的雲端草稿設了車禍當天的日期當密碼，希望有哪位值班護理師在檢查系統時能發現這些草稿——我沒有失智，請幫我報警，救我出去！」</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- APP 5: 外送平台紀錄 (FoodSync)             -->
+    <!-- ========================================== -->
+    <div x-show="activeApp === 'foodsync'" x-transition.opacity.duration.150ms class="space-y-3 pb-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="text-base font-bold text-pink-400">🛍️ 外送平台紀錄 (FoodSync)</h3>
+        <button @click="closeApp()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">返回桌面</button>
+      </div>
+
+      <p class="text-xs text-slate-400">帳號綁定：<span class="text-slate-200 font-mono-code">ruoqing.lin88@mail.tw</span>（點擊訂單檢視詳情）</p>
+
+      <div class="space-y-2.5">
+        <template x-for="(order, idx) in foodOrders" :key="idx">
+          <div @click="inspectFoodOrder(idx)"
+               class="bg-slate-900 border rounded-xl p-3 cursor-pointer transition"
+               :class="selectedOrderIdx === idx ? 'border-pink-500 bg-slate-800/90' : 'border-slate-800 hover:border-slate-700'">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-white" x-text="order.title"></span>
+              <span class="text-[10px] font-mono-code text-slate-400" x-text="order.date"></span>
+            </div>
+            <p class="text-[11px] text-slate-300 mt-1" x-text="order.items"></p>
+
+            <div x-show="selectedOrderIdx === idx" class="mt-2.5 pt-2.5 border-t border-slate-700 text-xs space-y-1">
+              <p class="text-slate-300"><strong class="text-pink-300">外送地址：</strong>新店區山林路 88 號 B 棟</p>
+              <p class="text-amber-300 bg-amber-950/40 px-2 py-1 rounded border border-amber-500/30">
+                <strong>外送員備註：</strong>「交一樓警衛室轉 404 護理站，嚴禁上樓」
+              </p>
+              <p class="text-[10px] font-mono-code text-rose-400 pt-1">⚠️ 偵測到此訂單由遠端裝置同步下單，與平板產生帳號衝突！</p>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- APP 6: 護理站緊急中控 (GuardControl)       -->
+    <!-- ========================================== -->
+    <div x-show="activeApp === 'guard'" x-transition.opacity.duration.150ms class="space-y-3 pb-6">
+      <div class="flex items-center justify-between border-b border-rose-900/80 pb-2">
+        <h3 class="text-base font-bold text-rose-400 animate-pulse">🚨 護理站緊急中控</h3>
+        <button @click="closeApp()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">返回桌面</button>
+      </div>
+
+      <div class="bg-rose-950/60 border-2 border-rose-500 rounded-xl p-3.5 space-y-2.5">
+        <div class="flex justify-between items-center">
+          <span class="text-xs font-bold text-rose-200">404 房即時生理與門禁監測</span>
+          <span class="px-2 py-0.5 rounded bg-rose-600 text-white text-[10px] font-mono-code font-bold animate-ping">LIVE</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-950/90 p-2.5 rounded-lg border border-rose-500/40">
+            <span class="text-[10px] text-slate-400 block">病患即時心率</span>
+            <span class="text-lg font-mono-code font-black text-rose-400">118 <small class="text-xs font-normal">bpm (極度恐慌)</small></span>
+          </div>
+          <div class="bg-slate-950/90 p-2.5 rounded-lg border border-rose-500/40">
+            <span class="text-[10px] text-slate-400 block">室內人員偵測</span>
+            <span class="text-xs font-bold text-amber-300 mt-1 block">陳宥維 院長（持針劑）</span>
+          </div>
+        </div>
+
+        <p class="text-xs text-rose-100 bg-black/40 p-2.5 rounded-lg leading-relaxed">
+          ⚠️ <strong>高風險醫療處置預警：</strong>偵測到氣動給藥窗 #209 剛傳送高濃度鎮靜劑 <span class="font-mono-code text-amber-300">Midazolam 5mg</span> 進入 404 房，陳院長正準備執行夜間靜脈注射！
+        </p>
+      </div>
+
+      <div class="space-y-3 pt-1">
+        <p class="text-xs text-slate-300 font-bold text-center">請立即選擇護理站中控處置指令：</p>
+
+        <button @click="triggerEndingA()"
+                class="w-full text-left p-3.5 rounded-xl bg-gradient-to-r from-emerald-900/90 to-teal-900/90 border-2 border-emerald-400 hover:brightness-110 transition active:scale-98 shadow-lg shadow-emerald-950/60">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono-code text-emerald-300 font-bold">ACTION A // 緊急覆寫協議</span>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/30 text-emerald-200">需 6 碼驗證</span>
+          </div>
+          <div class="text-sm font-bold text-white mt-1">🚨 啟動全區火警疏散覆寫（解除 404 氣密鎖並通報衛福部與警方）</div>
+          <p class="text-[11px] text-emerald-200/80 mt-1">強制彈開全棟電磁門禁，同步將 PT-880412 掉包證據上傳至雲端通報中心。</p>
+        </button>
+
+        <button @click="triggerEndingB()"
+                class="w-full text-left p-3.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-500 transition active:scale-98">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono-code text-slate-400">ACTION B // 系統維護協議</span>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">直接執行</span>
+          </div>
+          <div class="text-sm font-bold text-slate-200 mt-1">🧹 清除 Device #4 異常同步快取並簽署大夜班正常交班表</div>
+          <p class="text-[11px] text-slate-400 mt-1">抹除所有異常紀錄與鏡像檔案，當作今晚什麼都沒發生過。</p>
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- 4. 底部常駐 Home Bar 導覽列 -->
+  <footer class="h-11 bg-slate-950 border-t border-slate-800/90 px-6 flex items-center justify-between shrink-0 z-20">
+    <button @click="closeApp()" class="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition">
+      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      <span>返回</span>
+    </button>
+
+    <button @click="closeApp()" aria-label="返回主畫面"
+            class="w-28 h-1.5 rounded-full bg-slate-500 hover:bg-white transition active:scale-95"></button>
+
+    <button @click="replayLastDialogue()" class="text-xs text-sky-400 hover:text-sky-300 transition flex items-center gap-1">
+      <span>💬 紀錄</span>
+    </button>
+  </footer>
+
+  <!-- ======================================================== -->
+  <!-- 彈窗 1：密碼鎖驗證視窗 (Modal)                           -->
+  <!-- ======================================================== -->
+  <div x-show="passcodeModal.open" x-transition.opacity.duration.150ms
+       class="absolute inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-5">
+    <div class="w-full bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl space-y-4"
+         :class="passcodeModal.shake ? 'animate-shake border-rose-500' : ''">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-mono-code text-amber-400 font-bold">🔐 CARE-OS SECURITY LOCK</span>
+        <button @click="passcodeModal.open = false" class="text-slate-400 hover:text-white text-sm">✕</button>
+      </div>
+
+      <div>
+        <h4 class="text-base font-bold text-white" x-text="passcodeModal.title"></h4>
+        <p class="text-xs text-amber-300/90 mt-1.5 bg-amber-950/40 border border-amber-500/30 p-2.5 rounded-lg leading-relaxed"
+           x-text="passcodeModal.hint"></p>
+      </div>
+
+      <div>
+        <input type="text"
+               inputmode="numeric"
+               pattern="[0-9]*"
+               x-ref="passInput"
+               x-model="passcodeModal.input"
+               @focus="onPassInputFocus()"
+               @keyup.enter="submitPasscode()"
+               :maxlength="passcodeModal.answer.length"
+               placeholder="請輸入數字密碼"
+               class="w-full text-center tracking-[0.4em] font-mono-code text-xl font-bold bg-slate-950 border border-slate-600 rounded-xl py-3 text-white focus:outline-none focus:border-sky-400" />
+        <p x-show="passcodeModal.error" x-text="passcodeModal.error"
+           class="text-xs text-rose-400 text-center mt-2 font-medium"></p>
+      </div>
+
+      <div class="flex gap-2">
+        <button @click="passcodeModal.open = false"
+                class="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold">
+          取消
+        </button>
+        <button @click="submitPasscode()"
+                class="flex-1 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow-lg shadow-sky-950">
+          確認解鎖
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 彈窗 2：角色對話 / 獨白彈窗 (Dialogue Box)               -->
+  <!-- ======================================================== -->
+  <div x-show="dialogue.open" x-transition.opacity.duration.200ms
+       class="absolute inset-0 bg-black/75 backdrop-blur-[2px] z-50 flex flex-col justify-end p-4">
+    <div class="bg-slate-900/95 border-2 border-sky-500/50 rounded-2xl p-4 shadow-2xl space-y-3 mb-4">
+      <div class="flex items-center gap-3">
+        <!-- SVG 角色頭像 -->
+        <div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 border-2"
+             :class="dialogue.currentSpeaker === '護理長' ? 'bg-amber-950 border-amber-400' : 'bg-sky-950 border-sky-400'">
+          <svg x-show="dialogue.currentSpeaker === '蘇曉彤'" viewBox="0 0 24 24" class="w-7 h-7 text-sky-300" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="8" r="4"/><path d="M5 20c1.5-4 12.5-4 14 0"/><path d="M9 3h6l1 2H8l1-2z"/>
+          </svg>
+          <svg x-show="dialogue.currentSpeaker === '護理長'" viewBox="0 0 24 24" class="w-7 h-7 text-amber-300" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c2-4.5 14-4.5 16 0"/><path d="M8 4h8"/>
+          </svg>
+        </div>
+        <div>
+          <span class="text-xs font-bold px-2 py-0.5 rounded"
+                :class="dialogue.currentSpeaker === '護理長' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'"
+                x-text="dialogue.currentSpeaker"></span>
+          <p class="text-[10px] text-slate-400 mt-0.5"
+             x-text="dialogue.currentSpeaker === '護理長' ? '靜謐山莊資深護理長' : '大夜班新進護理師'"></p>
+        </div>
+      </div>
+
+      <p class="text-xs sm:text-sm text-slate-100 leading-relaxed min-h-[60px]" x-text="dialogue.currentText"></p>
+
+      <div class="flex justify-end">
+        <button @click="nextDialogue()"
+                class="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow-lg transition active:scale-95"
+                x-text="dialogue.buttonLabel"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 結局畫面 A：吹哨者的黎明 (黑底綠字系統通報日誌)          -->
+  <!-- ======================================================== -->
+  <div x-show="ending === 'A'" x-transition.opacity.duration.300ms
+       class="absolute inset-0 bg-black z-50 p-5 flex flex-col justify-between font-mono-code text-emerald-400 overflow-y-auto">
+    <div class="space-y-3">
+      <div class="border-b border-emerald-500/40 pb-2 flex justify-between items-center">
+        <span class="text-xs font-bold">EMERGENCY OVERRIDE // LOG_404</span>
+        <span class="text-[10px] px-2 py-0.5 bg-emerald-950 border border-emerald-500 rounded">已連線</span>
+      </div>
+
+      <div class="space-y-2.5 text-xs leading-relaxed">
+        <p>[02:26:01] <span class="text-white">覆寫碼 404209 驗證通過。全區火警疏散協定啟動！</span></p>
+        <p>[02:26:03] 404 房單向電磁氣密鎖已強制斷電彈開。</p>
+        <p>[02:26:05] 機密附件《PT-880412 原始 MRI 影像》與《Admin_Web_Portal 偽造通聯紀錄》已加密上傳至衛生福利部醫事司與轄區派出所報案中心。</p>
+        <p>[02:29:40] 系統追蹤：林若晴小姐已由蘇曉彤護理師護送，經職員專用貨梯抵達 1 樓大廳與警方會合。</p>
+        <p class="text-amber-300 pt-2 border-t border-emerald-900">
+          【隔日晨間新聞推播】<br/>
+          知名私立神經特護中心「靜謐山莊」驚傳非法囚禁案！院長陳宥維涉嫌調包已故病患腦部 MRI 影像，企圖偽造診斷侵占病患名下資產，今晨已遭檢警依妨害自由、偽造文書與詐欺罪嫌拘提到案。
+        </p>
+      </div>
+    </div>
+
+    <div class="pt-4 border-t border-emerald-500/40 space-y-3 text-center font-sans">
+      <div>
+        <span class="text-[11px] tracking-widest text-emerald-400 uppercase">TRUE ENDING</span>
+        <h2 class="text-xl font-black text-white mt-0.5">結局 A：吹哨者的黎明</h2>
+      </div>
+      <button @click="resetGame()"
+              class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black font-bold text-sm transition active:scale-95">
+        重新開始值班
+      </button>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 結局畫面 B：共犯的沉默                                   -->
+  <!-- ======================================================== -->
+  <div x-show="ending === 'B'" x-transition.opacity.duration.300ms
+       class="absolute inset-0 bg-slate-950 z-50 p-5 flex flex-col justify-between overflow-y-auto">
+    <div class="space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 text-center">
+        <span class="text-[10px] font-mono-code text-slate-400">404 房生理監測儀狀態更新</span>
+        <div class="text-2xl font-mono-code font-bold text-slate-300 mt-1">
+          118 bpm <span class="text-slate-500">→</span> <span class="text-sky-400">60 bpm</span>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-1">（靜脈鎮靜劑已生效，心率恢復死寂般的平穩）</p>
+      </div>
+
+      <div class="bg-amber-950/30 border border-amber-500/50 rounded-2xl p-4 space-y-2 shadow-lg">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-bold text-amber-300">💬 院內加密通訊：陳宥維 院長</span>
+          <span class="text-[10px] font-mono-code text-slate-400">02:28 AM</span>
+        </div>
+        <p class="text-xs sm:text-sm text-slate-100 leading-relaxed">
+          「蘇護理師，妳很聰明、也很懂事，知道什麼該看、什麼不該問。下個月起幫妳調升為 VIP 區副護理長，薪資調漲 30%。」
+        </p>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-700 rounded-2xl p-4 text-center space-y-1">
+        <p class="text-[11px] text-slate-400 font-mono-code">CareOS 系統已重新登入</p>
+        <h3 class="text-lg font-bold text-amber-300">「歡迎回來，蘇副護理長」</h3>
+      </div>
+    </div>
+
+    <div class="pt-4 border-t border-slate-800 space-y-3 text-center">
+      <div>
+        <span class="text-[11px] tracking-widest text-slate-400 uppercase">BAD ENDING</span>
+        <h2 class="text-xl font-black text-rose-400 mt-0.5">結局 B：共犯的沉默</h2>
+      </div>
+      <button @click="resetGame()"
+              class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm border border-slate-600 transition active:scale-95">
+        重新選擇（返回命運分歧點前）
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function careOSGame() {
+  return {
+    // 遊戲階段與系統狀態
+    stage: 0, // 0:開場, 1:午夜巡檢, 2:生活軌跡, 3:鏡像反轉, 4:終局抉擇
+    currentTime: '23:55',
+    staffGreeting: '早安，蘇曉彤 護理師',
+    activeApp: null,
+    hasUnreadAlert: false,
+    ending: null,
+
+    // 頂部任務引導橫幅
+    showTopBanner: false,
+    bannerTitle: '',
+    bannerText: '',
+    bannerUrgent: false,
+
+    // 巡檢與劇情觸發旗標
+    inspected: {
+      medchart: false,
+      room404: false,
+      website: false
+    },
+    vacuumMonologueShown: false,
+    doorLogHintShown: false,
+    doorLogBottomTriggered: false,
+    memoFocusHintShown: false,
+    chenChatBottomTriggered: false,
+
+    // 醫院病歷系統資料
+    medSearchInput: 'PT-2026404',
+    selectedPatient: '404',
+    pt880412Unlocked: false,
+    pt880412Checked: false,
+    patientRecords: [
+      {
+        id: '404',
+        room: '404房',
+        shortName: '林若晴',
+        chartNo: 'PT-2026404',
+        name: '林若晴',
+        gender: '女性',
+        age: 28,
+        wardLabel: '404 VIP 特護房',
+        admitDate: '20260814',
+        doctor: '陳宥維 院長',
+        diagnosis: '早發性額顳葉失智症',
+        contactName: '陳宥維（友人／主治醫師）',
+        contactPhone: '0912-347-913',
+        doc1Title: '📄 市立醫院急診轉診單',
+        doc1Date: '2026/08/14',
+        doc1Content: '主訴：夜間返家途中遭車輛擦撞跌倒。<br/>急診評估：<strong class="text-white">輕微腦震盪，意識完全清醒，對答如流，無神經學缺損</strong>。建議神經內科門診排程腦部 MRI 追蹤（健保門診排程需等候 45 天）。',
+        doc2Title: '📑 《3T 高階腦部微結構磁振造影（自費專案／研究計畫全額減免）同意書》',
+        doc2Content: '<p class="font-bold text-amber-200 mb-1">☑ 專案特別條款（已簽署）：</p>「本檢查為院內自費臨床研究專案，所有原始影像及判讀報告<strong>僅供本院及專案主持人（陳宥維醫師）留存，不併入健保雲端醫療資訊系統</strong>。」'
+      },
+      {
+        id: '401',
+        room: '401房',
+        shortName: '王建國',
+        chartNo: 'PT-2025109',
+        name: '王建國',
+        gender: '男性',
+        age: 81,
+        wardLabel: '401 一般特護房',
+        admitDate: '20251103',
+        doctor: '林哲瑋 醫師',
+        diagnosis: '阿茲海默症中晚期併發夜間譫妄',
+        contactName: '王志豪（長子）',
+        contactPhone: '0935-618-204',
+        doc1Title: '📄 區域教學醫院神經內科轉診單',
+        doc1Date: '2025/11/03',
+        doc1Content: '主訴：近半年記憶力顯著退化，偶有夜間遊走與方向感喪失。<br/>門診評估：MMSE 認知功能測驗 14 分，核磁共振顯示雙側海馬迴中度萎縮，建議轉入長期神經特護機構照護。',
+        doc2Title: '📑 《健保雲端醫療資訊同步與常規照護同意書》',
+        doc2Content: '家屬已簽署健保雲端病歷與影像共享授權，每週日下午 14:00 固定由家屬預約探視，目前每日規律服用 Donepezil 10mg，夜間生命徵象平穩。'
+      },
+      {
+        id: '402',
+        room: '402房',
+        shortName: '張美玲',
+        chartNo: 'PT-2026018',
+        name: '張美玲',
+        gender: '女性',
+        age: 76,
+        wardLabel: '402 一般特護房',
+        admitDate: '20260118',
+        doctor: '林哲瑋 醫師',
+        diagnosis: '血管性失智症（多發性腦梗塞後遺症）',
+        contactName: '周雅婷（女兒）',
+        contactPhone: '0928-441-790',
+        doc1Title: '📄 醫學中心腦中風中心出院病歷摘要',
+        doc1Date: '2026/01/18',
+        doc1Content: '主訴：左側肢體無力及步態不穩，伴隨近期記憶減退與言語遲緩。<br/>神經學檢查：腦部電腦斷層顯示陳舊性基底核多發性腔隙梗塞，無急性出血徵象，轉介本院進行復健與認知維持照護。',
+        doc2Title: '📑 《物理治療與日常吞嚥功能追蹤計畫書》',
+        doc2Content: '影像及檢驗報告均已併入健保醫療系統。目前採軟質低鹽飲食，白天於復健室進行被動關節運動，夜間睡眠品質良好，無異常躁動紀錄。'
+      },
+      {
+        id: '403',
+        room: '403房',
+        shortName: '李文華',
+        chartNo: 'PT-2026052',
+        name: '李文華',
+        gender: '男性',
+        age: 79,
+        wardLabel: '403 一般特護房',
+        admitDate: '20260522',
+        doctor: '許雅筑 醫師',
+        diagnosis: '路易氏體失智症（DLB）',
+        contactName: '李佳蓉（配偶）',
+        contactPhone: '0919-803-512',
+        doc1Title: '📄 市立聯合醫院精神科暨神經科會診單',
+        doc1Date: '2026/05/22',
+        doc1Content: '主訴：波動性注意力不集中、偶發視幻覺及輕度巴金森氏症候群。<br/>臨床評估：對抗精神病藥物敏感度高，建議採取非藥物環境安撫療法與低劑量膽鹼酶抑制劑治療。',
+        doc2Title: '📑 《防跌感測與家屬遠端視訊探視授權書》',
+        doc2Content: '病患家屬已開通 CareOS 家屬端視訊探視權限，每日傍晚 18:30 與配偶進行視訊通話，所有用藥調整均同步上傳健保雲端藥歷。'
+      },
+      {
+        id: '405',
+        room: '405房',
+        shortName: '陳淑芬',
+        chartNo: 'PT-2026079',
+        name: '陳淑芬',
+        gender: '女性',
+        age: 84,
+        wardLabel: '405 一般特護房',
+        admitDate: '20260709',
+        doctor: '許雅筑 醫師',
+        diagnosis: '混和型失智症（阿茲海默症合併腦血管病變）',
+        contactName: '吳建宏（外甥）',
+        contactPhone: '0963-215-887',
+        doc1Title: '📄 長照機構轉介暨神經內科評估報告',
+        doc1Date: '2026/07/09',
+        doc1Content: '主訴：高齡重聽伴隨重度記憶障礙，無法辨識時間與地點，生活起居需全天候專人協助。<br/>評估結果：血液生化與腦部影像均符合退化性病程，轉入本院 4 樓靜養照護。',
+        doc2Title: '📑 《高齡營養支持與常規生理監測同意書》',
+        doc2Content: '所有醫療紀錄依規定歸檔於健保醫療資訊網。夜間配戴血氧與心率監測手環，每兩小時由大夜班護理師巡視翻身並記錄於護理站系統。'
+      }
+    ],
+
+    // 智慧門鎖日誌逐筆紀錄
+    doorLogEntries: [
+      {
+        time: '02:15:04 (今日凌晨)',
+        tag: '異常進入',
+        msg: '[院長萬用卡刷卡進入 - 無護理師陪同紀錄]',
+        highlight: true,
+        timeClass: 'text-rose-400 font-bold',
+        msgClass: 'text-white font-bold'
+      },
+      {
+        time: '昨日 16:48:12',
+        tag: '感測觸發',
+        msg: '偵測到室內門板被強烈敲擊',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-amber-200'
+      },
+      {
+        time: '昨日 16:47:55',
+        tag: '感測觸發',
+        msg: '偵測到室內門把下壓嘗試開啟',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-slate-200'
+      },
+      {
+        time: '昨日 15:22:30',
+        tag: '感測觸發',
+        msg: '偵測到室內門板被強烈敲擊',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-amber-200'
+      },
+      {
+        time: '昨日 15:21:49',
+        tag: '感測觸發',
+        msg: '偵測到室內門把下壓嘗試開啟',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-slate-200'
+      },
+      {
+        time: '昨日 14:05:18',
+        tag: '感測觸發',
+        msg: '偵測到室內門把下壓嘗試開啟',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-slate-200'
+      },
+      {
+        time: '昨日 13:19:44',
+        tag: '感測觸發',
+        msg: '偵測到室內門板被強烈敲擊',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-amber-200'
+      },
+      {
+        time: '昨日 12:36:09',
+        tag: '感測觸發',
+        msg: '偵測到室內門把下壓嘗試開啟',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-slate-200'
+      },
+      {
+        time: '昨日 11:42:51',
+        tag: '感測觸發',
+        msg: '偵測到室內門板被強烈敲擊',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-amber-200'
+      },
+      {
+        time: '昨日 10:58:27',
+        tag: '感測觸發',
+        msg: '偵測到室內門把下壓嘗試開啟',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-slate-200'
+      },
+      {
+        time: '昨日 10:15:03',
+        tag: '感測觸發',
+        msg: '偵測到室內門板被強烈敲擊',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-amber-200'
+      },
+      {
+        time: '昨日 09:34:40',
+        tag: '感測觸發',
+        msg: '偵測到室內門把下壓嘗試開啟',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-slate-200'
+      },
+      {
+        time: '昨日 09:12:16',
+        tag: '感測觸發',
+        msg: '偵測到室內門把下壓嘗試開啟',
+        highlight: false,
+        timeClass: 'text-amber-400',
+        msgClass: 'text-slate-200'
+      },
+      {
+        time: '昨日 02:28:19',
+        tag: '離開紀錄',
+        msg: '[院長萬用卡刷卡離開]',
+        highlight: false,
+        timeClass: 'text-slate-400',
+        msgClass: 'text-slate-400'
+      }
+    ],
+
+    room404Tab: 'vacuum',
+    mirrorMode: false,
+    mirrorTab: 'chat',
+    activeChatThread: 'chen',
+    mriExposure: 15,
+    mriRevealed: false,
+
+    selectedOrderIdx: null,
+    foodOrderViewed: false,
+    foodOrders: [
+      {
+        title: '健康煮意低鈉餐盒（特護專案）',
+        date: '2026/11/14 18:10',
+        items: '清蒸鱸魚低鈉餐 x1、無糖豆漿 x1'
+      },
+      {
+        title: '全聯小時達（日用品急送）',
+        date: '2026/11/11 14:25',
+        items: '純水濕紙巾 x2、無香精護手霜 x1、筆記本 x1'
+      },
+      {
+        title: '康是美藥妝外送',
+        date: '2026/11/05 11:05',
+        items: '生理食鹽水 500ml x3、透氣膠帶 x2'
+      }
+    ],
+
+    // 4 道密碼鎖狀態
+    locks: {
+      doorLog: false, // 0488
+      memo: false,    // 20260814
+      mirror: false,  // 7913
+      override: false // 404209
+    },
+
+    passcodeModal: {
+      open: false,
+      target: '',
+      title: '',
+      hint: '',
+      answer: '',
+      input: '',
+      error: '',
+      shake: false
+    },
+
+    // 角色對話系統
+    dialogue: {
+      open: false,
+      queue: [],
+      index: 0,
+      currentSpeaker: '',
+      currentText: '',
+      buttonLabel: '繼續',
+      onComplete: null,
+      lastQueue: []
+    },
+
+    // Web Audio API 音效合成器
+    audioCtx: null,
+    initAudio() {
+      if (!this.audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) this.audioCtx = new AudioContext();
+      }
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+    },
+    playTap() {
+      this.initAudio();
+      if (!this.audioCtx) return;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(620, this.audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(280, this.audioCtx.currentTime + 0.045);
+      gain.gain.setValueAtTime(0.08, this.audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.045);
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+      osc.start();
+      osc.stop(this.audioCtx.currentTime + 0.05);
+    },
+    playBeep(success = true) {
+      this.initAudio();
+      if (!this.audioCtx) return;
+      const now = this.audioCtx.currentTime;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+      osc.type = success ? 'triangle' : 'sawtooth';
+      if (success) {
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.setValueAtTime(1174.66, now + 0.08);
+      } else {
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.setValueAtTime(140, now + 0.12);
+      }
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.24);
+    },
+    playAlarm() {
+      this.initAudio();
+      if (!this.audioCtx) return;
+      const now = this.audioCtx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(740, now + i * 0.22);
+        osc.frequency.setValueAtTime(520, now + i * 0.22 + 0.1);
+        gain.gain.setValueAtTime(0.08, now + i * 0.22);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.22 + 0.2);
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        osc.start(now + i * 0.22);
+        osc.stop(now + i * 0.22 + 0.2);
+      }
+    },
+
+    get inspectedCount() {
+      return (this.inspected.medchart ? 1 : 0) +
+             (this.inspected.room404 ? 1 : 0) +
+             (this.inspected.website ? 1 : 0);
+    },
+
+    // 初始化遊戲（階段 0）
+    initGame() {
+      this.startDialogue([
+        {
+          speaker: '蘇曉彤',
+          text: '我是蘇曉彤，今天新來報到的大夜班護理師。'
+        },
+        {
+          speaker: '護理長',
+          text: '歡迎加入靜謐山莊神經退化特護中心。大夜班很單純，定時巡檢平板系統就好。我們這裡的病患……只有一個要特別注意，就是 404 房的林小姐。她是陳院長的舊識，因為車禍誘發了早發性失智症，總以為自己還住在家裡。院長出於仁心，特別在公務平板裡架設了『擬真居家系統』配合她的妄想療法。妳只要確認系統正常運作、半夜別隨便開門打擾她休息就行。',
+          btn: '開始值班'
+        }
+      ], () => {
+        this.stage = 1;
+        this.currentTime = '00:00';
+        this.showTopBanner = false;
+      });
+    },
+
+    startDialogue(list, onComplete = null) {
+      this.dialogue.queue = list;
+      this.dialogue.lastQueue = list;
+      this.dialogue.index = 0;
+      this.dialogue.onComplete = onComplete;
+      this.dialogue.open = true;
+      this.updateDialogueFrame();
+    },
+
+    updateDialogueFrame() {
+      const item = this.dialogue.queue[this.dialogue.index];
+      if (!item) return;
+      this.dialogue.currentSpeaker = item.speaker;
+      this.dialogue.currentText = item.text;
+      const isLast = this.dialogue.index === this.dialogue.queue.length - 1;
+      this.dialogue.buttonLabel = item.btn || (isLast ? '確認' : '下一句');
+    },
+
+    nextDialogue() {
+      this.playTap();
+      if (this.dialogue.index < this.dialogue.queue.length - 1) {
+        this.dialogue.index++;
+        this.updateDialogueFrame();
+      } else {
+        this.dialogue.open = false;
+        if (typeof this.dialogue.onComplete === 'function') {
+          const cb = this.dialogue.onComplete;
+          this.dialogue.onComplete = null;
+          cb();
+        }
+      }
+    },
+
+    replayLastDialogue() {
+      this.playTap();
+      if (this.dialogue.lastQueue.length > 0) {
+        this.startDialogue(this.dialogue.lastQueue);
+      }
+    },
+
+    // 開啟桌面 APP
+    openApp(appName) {
+      this.playTap();
+      if ((appName === 'notes' || appName === 'foodsync') && this.stage < 2) {
+        this.showTopBanner = true;
+        this.bannerTitle = '存取受限';
+        this.bannerText = '此應用程式尚未到排程同步時間，請先完成當前調查步驟。';
+        return;
+      }
+      if (appName === 'guard' && this.stage < 4) {
+        this.showTopBanner = true;
+        this.bannerTitle = '權限鎖定';
+        this.bannerText = '護理站緊急中控僅在偵測到高風險醫療異常時啟動。';
+        return;
+      }
+
+      this.activeApp = appName;
+
+      // 階段 1 巡檢邏輯
+      if (appName === 'medchart') {
+        this.inspected.medchart = true;
+      } else if (appName === 'website') {
+        this.inspected.website = true;
+      } else if (appName === 'room404') {
+        this.inspected.room404 = true;
+        if (!this.vacuumMonologueShown) {
+          this.vacuumMonologueShown = true;
+          this.startDialogue([
+            {
+              speaker: '蘇曉彤',
+              text: '護理長說這只是做給病患看的假模擬動畫，讓她以為自己還住在家裡……'
+            }
+          ], () => this.checkStage1Completion());
+          return;
+        }
+      }
+
+      this.checkStage1Completion();
+    },
+
+    closeApp() {
+      this.playTap();
+      this.activeApp = null;
+      this.checkStage1Completion();
+    },
+
+    // 檢查階段 1 是否 3 個 APP 都已巡檢完畢 -> 時間跳至 02:15
+    checkStage1Completion() {
+      if (this.stage === 1 && this.inspectedCount === 3 && this.currentTime === '00:00' && !this.dialogue.open) {
+        this.currentTime = '02:15';
+        this.hasUnreadAlert = true;
+        this.playBeep(false);
+        this.showTopBanner = true;
+        this.bannerTitle = '門禁異常通知 (02:15)';
+        this.bannerText = '404 房智慧門鎖日誌有異常紀錄，請前往【404 擬真中控】核對。';
+        this.bannerUrgent = true;
+        this.startDialogue([
+          {
+            speaker: '蘇曉彤',
+            text: '咦？剛剛走廊好像有開門聲……這麼晚了誰在 4 樓？'
+          }
+        ]);
+      }
+    },
+
+    // 點擊智慧門鎖日誌 -> 第 1 道密碼鎖 (0488)
+    tryOpenDoorLog() {
+      this.playTap();
+      if (this.locks.doorLog) {
+        this.room404Tab = 'doorlog';
+        return;
+      }
+
+      const openLockModal = () => {
+        this.openPasscodeModal(
+          'doorLog',
+          '智慧門鎖日誌存取驗證',
+          '請輸入 4 位數字密碼',
+          '0488',
+          true
+        );
+      };
+
+      if (!this.doorLogHintShown) {
+        this.doorLogHintShown = true;
+        this.startDialogue([
+          {
+            speaker: '蘇曉彤',
+            text: '被鎖住了……剛剛護理長好像有說，門鎖日誌的密碼是『本院樓層和門牌號碼的組合』，我是不是該到【本院簡介網頁】去看看？'
+          }
+        ], openLockModal);
+      } else {
+        openLockModal();
+      }
+    },
+
+    // 智慧門鎖日誌滑動到底部 -> 觸發蘇曉彤疑惑對話並推進至階段 2
+    onDoorLogScroll(event) {
+      const el = event.target;
+      const reachedBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 16;
+      if (reachedBottom && !this.doorLogBottomTriggered) {
+        this.doorLogBottomTriggered = true;
+        this.stage = 2;
+        this.currentTime = '02:18';
+        this.showTopBanner = true;
+        this.bannerUrgent = false;
+        this.bannerTitle = '階段 2 // 雲端生活軌跡解鎖';
+        this.bannerText = '偵測到 404 房關聯雲端備忘錄與訂餐紀錄異常，請返回桌面點擊檢視【系統備忘錄】與【外送平台紀錄】。';
+
+        this.startDialogue([
+          {
+            speaker: '蘇曉彤',
+            text: '等一下……為什麼病房的智慧門鎖會特別設定『室內門把下壓』和『室內門板敲擊』的偵測系統？而且從早上九點到下午五點一直在試著開門和敲門……難道這扇門從裡面根本打不開、裡面的人根本無法出來嗎？'
+          }
+        ]);
+      }
+    },
+
+    // 點擊加密備忘錄 -> 第 2 道密碼鎖 (20260814)，預設不自動 focus 以便玩家點擊輸入框時觸發引導
+    tryOpenMemo() {
+      this.playTap();
+      if (this.locks.memo) return;
+      this.openPasscodeModal(
+        'memo',
+        '加密雲端草稿驗證',
+        '密碼提示：毀掉我人生的那一天（YYYYMMDD）',
+        '20260814',
+        false
+      );
+    },
+
+    // 需求 1：點擊加密雲端草稿輸入框時觸發角色思考提示
+    onPassInputFocus() {
+      if (this.passcodeModal.target === 'memo' && !this.memoFocusHintShown && !this.dialogue.open) {
+        this.memoFocusHintShown = true;
+        if (this.$refs.passInput) this.$refs.passInput.blur();
+        this.startDialogue([
+          {
+            speaker: '蘇曉彤',
+            text: '毀掉我人生的那一天？如果她真的是被關進來的，對她來說，毀掉她的會是哪一天呢？'
+          }
+        ], () => {
+          this.$nextTick(() => {
+            if (this.$refs.passInput) this.$refs.passInput.focus();
+          });
+        });
+      }
+    },
+
+    // 切換 Device #4 鏡像模式 -> 第 3 道密碼鎖 (7913)
+    tryToggleMirror() {
+      this.playTap();
+      if (this.mirrorMode) {
+        this.mirrorMode = false;
+        return;
+      }
+      if (this.locks.mirror) {
+        this.mirrorMode = true;
+        return;
+      }
+      this.openPasscodeModal(
+        'mirror',
+        'Device #4 鏡像子系統驗證',
+        '安全驗證：請輸入病歷登記之「緊急聯絡人」手機末 4 碼',
+        '7913',
+        true
+      );
+    },
+
+    // 需求 2：置頂對話陳宥維學長滑動到底部時觸發角色對話
+    onChenChatScroll(event) {
+      const el = event.target;
+      const reachedBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 16;
+      if (reachedBottom && !this.chenChatBottomTriggered) {
+        this.chenChatBottomTriggered = true;
+        this.startDialogue([
+          {
+            speaker: '蘇曉彤',
+            text: '8月14日不是車禍當天嗎？住院3天之後就已經稱老公了嗎？等等，這都是院長辦公室代發？那不就是院長在自導自演嗎？'
+          }
+        ]);
+      }
+    },
+
+    // 觸發結局 A -> 第 4 道密碼鎖 (404209)
+    triggerEndingA() {
+      this.playTap();
+      this.openPasscodeModal(
+        'override',
+        '全區火警疏散與氣密鎖強制覆寫',
+        '請輸入 6 碼緊急覆寫碼（3 碼房號 ＋ 3 碼氣動給藥窗設備編號）',
+        '404209',
+        true
+      );
+    },
+
+    // 觸發結局 B
+    triggerEndingB() {
+      this.playBeep(false);
+      this.ending = 'B';
+      this.staffGreeting = '歡迎回來，蘇副護理長';
+    },
+
+    // 開啟密碼視窗
+    openPasscodeModal(target, title, hint, answer, autoFocus = true) {
+      this.passcodeModal = {
+        open: true,
+        target,
+        title,
+        hint,
+        answer,
+        input: '',
+        error: '',
+        shake: false
+      };
+      if (autoFocus) {
+        this.$nextTick(() => {
+          if (this.$refs.passInput) this.$refs.passInput.focus();
+        });
+      }
+    },
+
+    // 驗證密碼
+    submitPasscode() {
+      const cleaned = (this.passcodeModal.input || '').trim();
+      if (cleaned === this.passcodeModal.answer) {
+        this.playBeep(true);
+        const target = this.passcodeModal.target;
+        this.passcodeModal.open = false;
+
+        if (target === 'doorLog') {
+          this.locks.doorLog = true;
+          this.room404Tab = 'doorlog';
+          this.showTopBanner = true;
+          this.bannerUrgent = false;
+          this.bannerTitle = '智慧門鎖日誌已解鎖';
+          this.bannerText = '請向下滑動檢視 404 房昨日完整門禁與感測器紀錄。';
+        } else if (target === 'memo') {
+          this.locks.memo = true;
+          this.checkStage2Progress();
+        } else if (target === 'mirror') {
+          this.locks.mirror = true;
+          this.mirrorMode = true;
+          this.mirrorTab = 'chat';
+          this.activeChatThread = 'chen';
+          this.showTopBanner = true;
+          this.bannerUrgent = false;
+          this.bannerTitle = '階段 3 // 鏡像系統已掛載';
+          this.bannerText = '請檢視【通訊軟體】與【雲端相簿】中的異常檔案。';
+        } else if (target === 'override') {
+          this.locks.override = true;
+          this.playAlarm();
+          this.ending = 'A';
+        }
+      } else {
+        this.playBeep(false);
+        this.passcodeModal.error = '密碼錯誤，請重新核對線索後輸入。';
+        this.passcodeModal.shake = false;
+        setTimeout(() => {
+          this.passcodeModal.shake = true;
+        }, 10);
+      }
+    },
+
+    // 查看外送訂單
+    inspectFoodOrder(idx) {
+      this.playTap();
+      this.selectedOrderIdx = idx;
+      this.foodOrderViewed = true;
+      this.checkStage2Progress();
+    },
+
+    checkStage2Progress() {
+      if (this.foodOrderViewed && this.stage < 3) {
+        this.stage = 3;
+        this.currentTime = '02:20';
+        this.showTopBanner = true;
+        this.bannerUrgent = true;
+        this.bannerTitle = '雲端帳號同步衝突！';
+        this.bannerText = '【404 擬真中控】偵測到隱藏子系統，請前往切換至 Device #4 鏡像模式。';
+      }
+    },
+
+    // 需求 3：MRI 滑桿拉動事件（不顯示上方或下方系統提示，直接觸發角色對話框）
+    onMriSliderChange() {
+      if (Number(this.mriExposure) > 75 && !this.mriRevealed) {
+        this.mriRevealed = true;
+        this.playBeep(true);
+        this.showTopBanner = false;
+        this.startDialogue([
+          {
+            speaker: '蘇曉彤',
+            text: '這個數字好像在哪裡看過，這不就是病號號碼嗎？這是林若晴的病歷號碼嗎？'
+          }
+        ]);
+      }
+    },
+    onMriSliderRelease() {
+      this.onMriSliderChange();
+    },
+
+    // 病歷號搜尋（需求 4：查出張國棟後觸發指定角色獨白）
+    searchMedRecord() {
+      this.playTap();
+      const q = (this.medSearchInput || '').trim().toUpperCase();
+      if (q === 'PT-880412' || q === '880412') {
+        this.playBeep(true);
+        this.selectedPatient = 'PT-880412';
+        this.pt880412Unlocked = true;
+        if (!this.pt880412Checked) {
+          this.pt880412Checked = true;
+          this.stage = 4;
+          this.currentTime = '02:25';
+          this.playAlarm();
+          this.showTopBanner = true;
+          this.bannerUrgent = true;
+          this.bannerTitle = '緊急醫療警報 (02:25)';
+          this.bannerText = '警報：陳院長目前仍在 404 號房內，準備執行夜間靜脈注射（Midazolam 5mg），請立即開啟【護理站緊急中控】處置！';
+          this.startDialogue([
+            {
+              speaker: '蘇曉彤',
+              text: '原來這根本不是林若晴的腦部掃描，這是已經過世的病患生前的掃描圖，而且這掃描日期根本就在林若晴入院之前！看來院長真的造假病歷，還囚禁了這個女孩...'
+            }
+          ]);
+        }
+      } else if (q === 'PT-2026404' || q === '404') {
+        this.selectedPatient = '404';
+      } else if (q === 'PT-2025109' || q === '401') {
+        this.selectedPatient = '401';
+      } else if (q === 'PT-2026018' || q === '402') {
+        this.selectedPatient = '402';
+      } else if (q === 'PT-2026052' || q === '403') {
+        this.selectedPatient = '403';
+      } else if (q === 'PT-2026079' || q === '405') {
+        this.selectedPatient = '405';
+      } else {
+        this.playBeep(false);
+        this.showTopBanner = true;
+        this.bannerTitle = '查無此病歷號';
+        this.bannerText = `系統資料庫中找不到「${q}」，請確認病歷編號格式（如 PT-880412）。`;
+      }
+    },
+
+    bannerAction() {
+      if (this.stage === 1 && this.currentTime === '02:15') {
+        this.openApp('room404');
+      } else if (this.stage === 3 && !this.locks.mirror) {
+        this.openApp('room404');
+      } else if (this.stage === 3 && this.mriRevealed && !this.pt880412Checked) {
+        this.openApp('medchart');
+      } else if (this.stage === 4) {
+        this.openApp('guard');
+      }
+    },
+
+    // 重置遊戲
+    resetGame() {
+      this.playTap();
+      this.stage = 0;
+      this.currentTime = '23:55';
+      this.staffGreeting = '早安，蘇曉彤 護理師';
+      this.activeApp = null;
+      this.hasUnreadAlert = false;
+      this.ending = null;
+      this.showTopBanner = false;
+      this.inspected = { medchart: false, room404: false, website: false };
+      this.vacuumMonologueShown = false;
+      this.doorLogHintShown = false;
+      this.doorLogBottomTriggered = false;
+      this.memoFocusHintShown = false;
+      this.chenChatBottomTriggered = false;
+      this.medSearchInput = 'PT-2026404';
+      this.selectedPatient = '404';
+      this.pt880412Unlocked = false;
+      this.pt880412Checked = false;
+      this.room404Tab = 'vacuum';
+      this.mirrorMode = false;
+      this.mirrorTab = 'chat';
+      this.activeChatThread = 'chen';
+      this.mriExposure = 15;
+      this.mriRevealed = false;
+      this.selectedOrderIdx = null;
+      this.foodOrderViewed = false;
+      this.locks = { doorLog: false, memo: false, mirror: false, override: false };
+      this.initGame();
+    }
+  };
+}
+</script>
+</body>
+</html>
